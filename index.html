@@ -1267,6 +1267,35 @@ table.score-grid td.filled.team-b{
   #board{ --player-name-clearance: clamp(64px, 11.5vh, 86px); }
 }
 
+
+/* ===== index-1: mobile fullscreen / dynamic viewport restoration ===== */
+html, body{
+  width:100%;
+  min-height:100%;
+  margin:0;
+}
+@supports (height:100dvh){
+  html, body, #app, .rotor{
+    height:100dvh !important;
+    min-height:100dvh !important;
+  }
+}
+@supports not (height:100dvh){
+  html, body, #app, .rotor{
+    height:100vh !important;
+    min-height:100vh !important;
+  }
+}
+body{
+  overscroll-behavior:none;
+}
+
+
+/* ===== index-2: 試合開始と大会Now連携の間隔 ===== */
+#startBtn{
+  margin-bottom: clamp(48px, 8vh, 88px) !important;
+}
+
 </style>
 
 </head>
@@ -4102,6 +4131,52 @@ setTimeout(()=>{ try{ startConnectionMonitor(); }catch(e){} },1200);
     });
     btnState();
   });
+})();
+</script>
+
+
+<script>
+/* ===== index-1: smartphone fullscreen restoration ===== */
+(function(){
+  function setViewportHeight(){
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--badoru-vh', h + 'px');
+    const board = document.getElementById('board');
+    const rotor = document.querySelector('.rotor');
+    if(rotor) rotor.style.height = h + 'px';
+    if(board && board.offsetParent !== null) board.style.height = h + 'px';
+  }
+
+  async function requestBadoruFullscreen(){
+    const el = document.documentElement;
+    try{
+      if(document.fullscreenElement) return true;
+      if(el.requestFullscreen){
+        await el.requestFullscreen({navigationUI:'hide'}).catch(()=>el.requestFullscreen());
+        return true;
+      }
+      if(el.webkitRequestFullscreen){
+        el.webkitRequestFullscreen();
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+
+  window.requestBadoruFullscreen = requestBadoruFullscreen;
+  window.addEventListener('resize', setViewportHeight, {passive:true});
+  window.addEventListener('orientationchange', ()=>setTimeout(setViewportHeight,150), {passive:true});
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', setViewportHeight, {passive:true});
+  }
+  document.addEventListener('DOMContentLoaded', setViewportHeight);
+  setViewportHeight();
+
+  // Fullscreen API requires a user gesture. Starting the match is the natural trigger.
+  document.addEventListener('click', function(e){
+    const start = e.target && e.target.closest ? e.target.closest('#startBtn') : null;
+    if(start) requestBadoruFullscreen();
+  }, true);
 })();
 </script>
 
