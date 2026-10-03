@@ -1219,6 +1219,54 @@ table.score-grid td.filled.team-b{
   #board .board-view-toggle button{ font-size:13px; padding:0 4px; }
 }
 
+
+/* ===== v11 選手名の上下対称セーフエリア修正 =====
+   上端・下端を同じ値で固定し、その中で2名を上下端に配置する。
+   得点数字のレイアウトとは独立させることで、画面サイズによるズレを防ぐ。 */
+#board{
+  --player-name-clearance: clamp(82px, 12vh, 118px);
+}
+#board .side{
+  position:relative;
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+}
+#board .court-slots{
+  position:absolute !important;
+  z-index:12;
+  top:var(--player-name-clearance) !important;
+  bottom:var(--player-name-clearance) !important;
+  left:0 !important;
+  right:0 !important;
+  width:100% !important;
+  height:auto !important;
+  min-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:space-between !important;
+  align-items:stretch !important;
+  pointer-events:none;
+}
+#board .court-slots .slot{
+  flex:0 0 auto !important;
+  margin:0 !important;
+  padding:0 clamp(14px,2vw,30px) !important;
+  line-height:1.05 !important;
+}
+#board #slotsLeft .slot:first-child,
+#board #slotsRight .slot:first-child{
+  align-self:flex-start;
+}
+#board #slotsLeft .slot:last-child,
+#board #slotsRight .slot:last-child{
+  align-self:flex-end;
+}
+@media (orientation:landscape) and (max-height:760px){
+  #board{ --player-name-clearance: clamp(64px, 11.5vh, 86px); }
+}
+
 </style>
 
 </head>
