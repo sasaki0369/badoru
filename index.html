@@ -1138,6 +1138,87 @@ table.score-grid td.filled.team-b{
 #intervalStartBtn{background:#fff;color:#111;min-width:180px;}
 #intervalStartBtn:disabled{opacity:.45;}
 #intervalUndoBtn{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);margin-right:10px;}
+
+/* ===== v10 表示方向切替・選手名クリアランス ===== */
+#board .board-view-toggle{
+  flex:1.35;
+  min-width:0;
+  display:flex;
+  align-items:stretch;
+  gap:0;
+  border:1px solid #3a3a3a;
+  border-radius:12px;
+  overflow:hidden;
+  background:#171717;
+}
+#board .board-view-toggle button{
+  flex:1 1 50%;
+  min-width:0;
+  min-height:0;
+  padding:0 8px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:#8d8d8d;
+  font-size:clamp(13px,1.45vw,20px);
+  font-weight:800;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+#board .board-view-toggle button.on{
+  background:#f4f4f4;
+  color:#111;
+}
+#board .side{
+  /* 第○ゲーム等の上部表示と、下部操作列から同量の余白を確保 */
+  padding-top:clamp(52px,7.5vh,78px) !important;
+  padding-bottom:clamp(52px,7.5vh,78px) !important;
+}
+#board .court-slots{
+  width:100%;
+  min-height:0 !important;
+  margin:0 !important;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  align-items:stretch;
+  gap:0 !important;
+  position:absolute;
+  top:clamp(52px,7.5vh,78px);
+  bottom:clamp(52px,7.5vh,78px);
+  left:0;
+  right:0;
+  pointer-events:none;
+}
+#board .slot{
+  max-width:none !important;
+  width:100%;
+  padding:0 clamp(14px,2vw,30px) !important;
+  font-size:clamp(20px,2.5vw,38px) !important;
+  line-height:1.05 !important;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#board #slotsLeft .slot{ text-align:left !important; }
+#board #slotsRight .slot{ text-align:right !important; }
+#board .court-slots .slot.singles-player{
+  max-width:none !important;
+  width:100% !important;
+  margin:0 !important;
+}
+@media (orientation:landscape) and (max-height:760px){
+  #board .side{
+    padding-top:46px !important;
+    padding-bottom:46px !important;
+  }
+  #board .court-slots{
+    top:46px;
+    bottom:46px;
+  }
+  #board .board-view-toggle button{ font-size:13px; padding:0 4px; }
+}
+
 </style>
 
 </head>
@@ -1239,6 +1320,14 @@ table.score-grid td.filled.team-b{
       </div>
     </div>
 
+    <div class="err" id="settingsErr"></div>
+    <button class="start-btn" id="startBtn">試合開始</button>
+
+    <div class="past-matches" id="pastMatchesWrap" style="display:none;">
+      <h3>過去の試合</h3>
+      <div id="pastMatchesList"></div>
+    </div>
+
     <div class="field field-taika-link">
       <label>大会Now連携</label>
       <div class="team-block taika-link-inputs">
@@ -1253,14 +1342,6 @@ table.score-grid td.filled.team-b{
         <button type="button" class="qr-link-btn" id="scanTaikaQrBtn">大会NowのQRを読み取る</button>
       </div>
       <div class="hint" id="taikaStatusHint">連携すると、大会Nowから配信された次の試合が自動的に反映されます。</div>
-    </div>
-
-    <div class="err" id="settingsErr"></div>
-    <button class="start-btn" id="startBtn">試合開始</button>
-
-    <div class="past-matches" id="pastMatchesWrap" style="display:none;">
-      <h3>過去の試合</h3>
-      <div id="pastMatchesList"></div>
     </div>
   </div>
 
@@ -1278,11 +1359,7 @@ table.score-grid td.filled.team-b{
     <div class="court-badge court-badge-board" id="courtBadgeBoard" style="display:none;"></div>
     <div class="game-target-badge" id="gameBadge"></div>
     <div class="set-status" id="setStatus"></div>
-    <div class="view-toggle" id="viewToggle" aria-label="表示視点">
-      <button type="button" id="viewRefereeBtn">審判側</button>
-      <button type="button" id="viewPlayerBtn">選手向け</button>
-    </div>
-    <div class="board-main">
+<div class="board-main">
       <div class="side" id="sideLeft">
         <div class="score-zone"><div class="score-num" id="scoreLeftNum"></div></div>
         <div class="court-slots" id="slotsLeft"></div>
@@ -1295,6 +1372,10 @@ table.score-grid td.filled.team-b{
     </div>
     <div class="controls">
       <button class="undo-btn" id="undoBtn">Undo</button>
+      <div class="board-view-toggle" id="boardViewToggle" aria-label="表示方向">
+        <button type="button" id="viewRefereeBtn">審判側</button>
+        <button type="button" id="viewPlayerBtn" class="on">選手向け</button>
+      </div>
       <button class="stop-btn" id="retireBtn">棄権</button>
       <button class="stop-btn" id="stopBtn">開始取消</button>
     </div>
@@ -1986,7 +2067,15 @@ function renderTaikaStatusHint(courtData){
     if(startBtn) startBtn.disabled = true;
   }else if(courtData.status === 'assigned'){
     taikaStatusHint.textContent = `${courtLabel}大会Now連携：試合が配信されました。内容を確認して「試合開始」を押してください。`;
-    if(startBtn) startBtn.disabled = !hasCourtOperationRight();
+    if(startBtn){
+      startBtn.disabled = !hasCourtOperationRight();
+      // 配信された試合の確認後、すぐ開始操作へ移れるよう開始ボタンを画面内へ案内する。
+      const assignedKey = String((courtData.match && (courtData.match.matchCode || courtData.match.id)) || '') + '|' + String(courtData.assignedAt || '');
+      if(startBtn.dataset.taikaAssignedKey !== assignedKey){
+        startBtn.dataset.taikaAssignedKey = assignedKey;
+        requestAnimationFrame(()=>startBtn.scrollIntoView({behavior:'smooth', block:'center'}));
+      }
+    }
   }else if(courtData.status === 'live'){
     taikaStatusHint.textContent = `${courtLabel}大会Now連携：この試合は進行中として記録されています。`;
     // 進行中の試合を設定画面から二重開始してスコアを初期化しない。
@@ -3935,5 +4024,38 @@ if(!restoreActiveMatchLocal()) showSettings();
 
 setTimeout(()=>{ try{ startConnectionMonitor(); }catch(e){} },1200);
 </script>
+
+<script>
+/* ===== v10 表示方向切替 ===== */
+(function(){
+  const KEY='badoru_board_view_v10';
+  // 今回からデフォルトは選手向け。明示保存がない端末も選手向けから開始。
+  let boardView = localStorage.getItem(KEY) || 'player';
+
+  function btnState(){
+    const r=document.getElementById('viewRefereeBtn');
+    const p=document.getElementById('viewPlayerBtn');
+    if(r) r.classList.toggle('on', boardView==='referee');
+    if(p) p.classList.toggle('on', boardView==='player');
+  }
+  window.getBadoruBoardView=function(){ return boardView; };
+  window.setBadoruBoardView=function(v){
+    boardView = v==='referee' ? 'referee' : 'player';
+    try{ localStorage.setItem(KEY,boardView); }catch(e){}
+    btnState();
+    if(typeof window.render==='function') window.render();
+  };
+  document.addEventListener('DOMContentLoaded',function(){
+    document.getElementById('viewRefereeBtn')?.addEventListener('click',e=>{
+      e.stopPropagation(); window.setBadoruBoardView('referee');
+    });
+    document.getElementById('viewPlayerBtn')?.addEventListener('click',e=>{
+      e.stopPropagation(); window.setBadoruBoardView('player');
+    });
+    btnState();
+  });
+})();
+</script>
+
 </body>
 </html>
