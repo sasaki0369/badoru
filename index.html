@@ -394,6 +394,69 @@ html,body{
   }
 }
 
+
+/* ===== 表示視点切替 / ダブルス左右ポジション ===== */
+.view-toggle{
+  position:absolute;
+  top:.55vh;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:35;
+  display:flex;
+  gap:3px;
+  padding:3px;
+  border-radius:999px;
+  background:rgba(45,45,45,.92);
+  border:1px solid #555;
+}
+.view-toggle button{
+  border:0;
+  border-radius:999px;
+  padding:.45vh 1.05vw;
+  background:transparent;
+  color:#aaa;
+  font-size:clamp(12px,1.35vw,18px);
+  font-weight:800;
+  white-space:nowrap;
+}
+.view-toggle button.on{ background:#fff; color:#111; }
+#board .set-status{ top:5.1vh; }
+#board .court-slots.position-stack{
+  position:absolute;
+  top:1.3vh;
+  bottom:1.3vh;
+  left:1.6vw;
+  right:1.6vw;
+  margin:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  align-items:stretch;
+  pointer-events:none;
+}
+#board .court-slots.position-stack .slot{
+  width:100%;
+  max-width:none;
+  flex:0 0 auto;
+  padding:0;
+  font-size:clamp(18px,2.05vw,31px);
+  line-height:1.08;
+  text-align:left;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  text-shadow:0 2px 4px rgba(0,0,0,.8);
+}
+#board .court-slots.position-stack .slot.server{
+  color:var(--orange);
+}
+@media (orientation:landscape) and (max-height:600px){
+  .view-toggle button{ padding:3px 9px; font-size:12px; }
+  #board .set-status{ top:32px; }
+  #board .court-slots.position-stack .slot{ font-size:clamp(16px,2vw,25px); }
+}
+
 /* ---------- 設定画面（縦画面固定・柔らかい配色・大きめUI） ---------- */
 #settings{
   position:relative;
@@ -1215,6 +1278,10 @@ table.score-grid td.filled.team-b{
     <div class="court-badge court-badge-board" id="courtBadgeBoard" style="display:none;"></div>
     <div class="game-target-badge" id="gameBadge"></div>
     <div class="set-status" id="setStatus"></div>
+    <div class="view-toggle" id="viewToggle" aria-label="表示視点">
+      <button type="button" id="viewRefereeBtn">審判側</button>
+      <button type="button" id="viewPlayerBtn">選手向け</button>
+    </div>
     <div class="board-main">
       <div class="side" id="sideLeft">
         <div class="score-zone"><div class="score-num" id="scoreLeftNum"></div></div>
@@ -3347,6 +3414,18 @@ const scoreRightNum = document.getElementById('scoreRightNum');
 const slotsLeft = document.getElementById('slotsLeft');
 const slotsRight = document.getElementById('slotsRight');
 const undoBtn = document.getElementById('undoBtn');
+const viewRefereeBtn = document.getElementById('viewRefereeBtn');
+const viewPlayerBtn = document.getElementById('viewPlayerBtn');
+const VIEW_MODE_KEY = 'badoru_score_view_mode_v1';
+let scoreViewMode = (()=>{ try{ return localStorage.getItem(VIEW_MODE_KEY)==='player' ? 'player' : 'referee'; }catch(e){ return 'referee'; } })();
+function setScoreViewMode(mode){
+  scoreViewMode = mode === 'player' ? 'player' : 'referee';
+  try{ localStorage.setItem(VIEW_MODE_KEY, scoreViewMode); }catch(e){}
+  render();
+}
+viewRefereeBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); setScoreViewMode('referee'); });
+viewPlayerBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); setScoreViewMode('player'); });
+
 
 function showBoard(){
   settingsEl.classList.remove('active');
@@ -3360,8 +3439,9 @@ function showSettings(){
   renderPastMatches();
 }
 
-function renderSlots(container, team){
+function renderSlots(container, team, panelSide){
   container.innerHTML = '';
+  container.classList.remove('position-stack');
   const serverTeam = state.serverTeam;
   const serverPlayer = currentServerPlayer();
 
@@ -3380,8 +3460,13 @@ function renderSlots(container, team){
     return;
   }
 
+  // ダブルスは、得点の横に2人を縦配置してコート上の左右位置を直感的に示す。
+  // 左パネルは上=left/下=right、右パネルは上=right/下=left。
+  // 選手向け表示ではチーム自体を180度反転するため、この規則のままで見た目も180度反転する。
+  container.classList.add('position-stack');
   const pos = state.positions[team];
-  ['right','left'].forEach(box=>{
+  const boxes = panelSide === 'left' ? ['left','right'] : ['right','left'];
+  boxes.forEach(box=>{
     const name = pos[box];
     const slot = document.createElement('div');
     const isServer = (team === serverTeam) && (name === serverPlayer);
@@ -3428,8 +3513,11 @@ function computeCardStyle(leftDigits, rightDigits){
 function render(){
   if(!state || !match) return;
   if(settings){ if(settings.intervalEnabled==null) settings.intervalEnabled=true; if(settings.midIntervalSec==null) settings.midIntervalSec=60; if(settings.gameIntervalSec==null) settings.gameIntervalSec=120; }
-  const leftTeam = state.leftTeam;
+  const refereeLeftTeam = state.leftTeam;
+  const leftTeam = scoreViewMode === 'player' ? otherTeam(refereeLeftTeam) : refereeLeftTeam;
   const rightTeam = otherTeam(leftTeam);
+  viewRefereeBtn?.classList.toggle('on', scoreViewMode === 'referee');
+  viewPlayerBtn?.classList.toggle('on', scoreViewMode === 'player');
 
   const leftScoreStr = String(state.score[leftTeam]);
   const rightScoreStr = String(state.score[rightTeam]);
@@ -3441,8 +3529,8 @@ function render(){
   sideLeftEl.classList.toggle('serving', state.serverTeam === leftTeam);
   sideRightEl.classList.toggle('serving', state.serverTeam === rightTeam);
 
-  renderSlots(slotsLeft, leftTeam);
-  renderSlots(slotsRight, rightTeam);
+  renderSlots(slotsLeft, leftTeam, 'left');
+  renderSlots(slotsRight, rightTeam, 'right');
 
   undoBtn.disabled = historyStack.length === 0;
   mirrorTaikaLiveScore();
@@ -3464,12 +3552,12 @@ function render(){
 sideLeftEl.addEventListener('click', ()=>{
   if(!ensureCourtOperationRight()) return;
   if(!state || state.status !== 'ongoing') return;
-  awardPoint(state.leftTeam);
+  awardPoint(scoreViewMode === 'player' ? otherTeam(state.leftTeam) : state.leftTeam);
 });
 sideRightEl.addEventListener('click', ()=>{
   if(!ensureCourtOperationRight()) return;
   if(!state || state.status !== 'ongoing') return;
-  awardPoint(otherTeam(state.leftTeam));
+  awardPoint(scoreViewMode === 'player' ? state.leftTeam : otherTeam(state.leftTeam));
 });
 
 document.getElementById('undoBtn').addEventListener('click', ()=>{ if(ensureCourtOperationRight()) undoLast(); });
