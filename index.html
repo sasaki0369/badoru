@@ -3649,7 +3649,7 @@ const undoBtn = document.getElementById('undoBtn');
 const viewRefereeBtn = document.getElementById('viewRefereeBtn');
 const viewPlayerBtn = document.getElementById('viewPlayerBtn');
 const VIEW_MODE_KEY = 'badoru_score_view_mode_v1';
-let scoreViewMode = (()=>{ try{ return localStorage.getItem(VIEW_MODE_KEY)==='player' ? 'player' : 'referee'; }catch(e){ return 'referee'; } })();
+let scoreViewMode = (()=>{ try{ return localStorage.getItem(VIEW_MODE_KEY)==='referee' ? 'referee' : 'player'; }catch(e){ return 'player'; } })();
 function setScoreViewMode(mode){
   scoreViewMode = mode === 'player' ? 'player' : 'referee';
   try{ localStorage.setItem(VIEW_MODE_KEY, scoreViewMode); }catch(e){}
@@ -4168,37 +4168,7 @@ if(!restoreActiveMatchLocal()) showSettings();
 setTimeout(()=>{ try{ startConnectionMonitor(); }catch(e){} },1200);
 </script>
 
-<script>
-/* ===== v10 表示方向切替 ===== */
-(function(){
-  const KEY='badoru_board_view_v10';
-  // 今回からデフォルトは選手向け。明示保存がない端末も選手向けから開始。
-  let boardView = localStorage.getItem(KEY) || 'player';
 
-  function btnState(){
-    const r=document.getElementById('viewRefereeBtn');
-    const p=document.getElementById('viewPlayerBtn');
-    if(r) r.classList.toggle('on', boardView==='referee');
-    if(p) p.classList.toggle('on', boardView==='player');
-  }
-  window.getBadoruBoardView=function(){ return boardView; };
-  window.setBadoruBoardView=function(v){
-    boardView = v==='referee' ? 'referee' : 'player';
-    try{ localStorage.setItem(KEY,boardView); }catch(e){}
-    btnState();
-    if(typeof window.render==='function') window.render();
-  };
-  document.addEventListener('DOMContentLoaded',function(){
-    document.getElementById('viewRefereeBtn')?.addEventListener('click',e=>{
-      e.stopPropagation(); window.setBadoruBoardView('referee');
-    });
-    document.getElementById('viewPlayerBtn')?.addEventListener('click',e=>{
-      e.stopPropagation(); window.setBadoruBoardView('player');
-    });
-    btnState();
-  });
-})();
-</script>
 
 
 <script>
