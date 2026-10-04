@@ -2865,6 +2865,9 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
   // Fullscreen API はユーザー操作中に直接呼ぶ必要がある。
   // 大会Nowの fullscreen=1 連携では「試合開始」のタップを確実な起点にする。
   enterTaikaFullscreen();
+  // 試合開始後の得点盤は常に横画面。対応端末ではorientation lock、
+  // 非対応端末では90度回転レイアウトで同じ横長配置を維持する。
+  lockScoreBoardLandscape();
   if(!hasCourtOperationRight()) return;
   // 大会Now連携中は、運営側から現在のコートへ試合が配信されている場合だけ開始できる。
   // 配信待ち（コートデータなし／idle／matchなし）では、DOMのdisabled状態に関係なく開始を拒否する。
@@ -3659,15 +3662,48 @@ viewRefereeBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); setScoreVi
 viewPlayerBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); setScoreViewMode('player'); });
 
 
+function syncScoreBoardOrientation(){
+  const rotor=boardEl?.parentElement;
+  if(!rotor || !boardEl) return;
+  const portrait=window.matchMedia && window.matchMedia('(orientation: portrait)').matches;
+  if(portrait){
+    // 縦持ちでも得点盤そのものは横長の論理画面として描画し、CSSで90度回転する。
+    // visualViewport の高さを直接入れると回転後の縦横が崩れるため、inline指定は解除する。
+    rotor.style.width='100vh';
+    rotor.style.height='100vw';
+    boardEl.style.width='100%';
+    boardEl.style.height='100%';
+  }else{
+    rotor.style.width='100vw';
+    rotor.style.height='var(--badoru-vh, 100dvh)';
+    boardEl.style.width='100%';
+    boardEl.style.height='100%';
+  }
+}
+window.syncScoreBoardOrientation=syncScoreBoardOrientation;
+async function lockScoreBoardLandscape(){
+  // 対応ブラウザでは物理画面も横向きに固定。iOS等の非対応環境では
+  // 上記90度回転レイアウトがフォールバックとなる。
+  try{
+    if(screen.orientation && typeof screen.orientation.lock==='function'){
+      await screen.orientation.lock('landscape').catch(()=>{});
+    }
+  }catch(e){}
+  syncScoreBoardOrientation();
+}
 function showBoard(){
   settingsEl.classList.remove('active');
   boardEl.classList.add('active');
   boardEl.parentElement.classList.add('active'); // .rotor
+  syncScoreBoardOrientation();
+  setTimeout(syncScoreBoardOrientation, 80);
+  setTimeout(syncScoreBoardOrientation, 300);
 }
 function showSettings(){
   boardEl.classList.remove('active');
   boardEl.parentElement.classList.remove('active'); // .rotor
   settingsEl.classList.add('active');
+  try{ if(screen.orientation && typeof screen.orientation.unlock==='function') screen.orientation.unlock(); }catch(e){}
   renderPastMatches();
 }
 
@@ -4152,7 +4188,7 @@ subscribeMatchRef();
 
 /* ---------- 画面向き変更時の再描画 ---------- */
 window.addEventListener('resize', ()=>{ if(state) render(); });
-window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if(state) render(); }, 200); });
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if(state){ syncScoreBoardOrientation(); render(); } }, 200); });
 
 /* ---------- 再読み込み・タブ終了直前にも最新状態を保存 ---------- */
 window.addEventListener('pagehide', saveActiveMatchLocal);
@@ -4179,8 +4215,11 @@ setTimeout(()=>{ try{ startConnectionMonitor(); }catch(e){} },1200);
     document.documentElement.style.setProperty('--badoru-vh', h + 'px');
     const board = document.getElementById('board');
     const rotor = document.querySelector('.rotor');
-    if(rotor) rotor.style.height = h + 'px';
-    if(board && board.offsetParent !== null) board.style.height = h + 'px';
+    // 得点盤は縦持ち時に90度回転するため、visualViewport.height を
+    // rotor/boardへ直接指定しない。縦横サイズは syncScoreBoardOrientation() が管理する。
+    if(board && board.offsetParent !== null && typeof window.syncScoreBoardOrientation === 'function'){
+      window.syncScoreBoardOrientation();
+    }
   }
 
   async function requestBadoruFullscreen(){
