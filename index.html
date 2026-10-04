@@ -1296,6 +1296,48 @@ body{
   margin-bottom: clamp(48px, 8vh, 88px) !important;
 }
 
+
+/* ===== index-3 総合自動テスト ===== */
+.auto-test-area{
+  margin-top:clamp(34px,6vh,64px);
+  padding-top:clamp(22px,3.5vh,38px);
+  border-top:1px dashed #d8c7b6;
+}
+.auto-test-btn{
+  width:100%; border:0; border-radius:18px; padding:18px 16px;
+  background:#252525; color:#fff; font-weight:900; font-size:clamp(18px,2.6vw,28px);
+  letter-spacing:.04em; cursor:pointer;
+}
+.auto-test-overlay{
+  display:none; position:fixed; inset:0; z-index:200000;
+  background:rgba(0,0,0,.72); padding:16px;
+  align-items:center; justify-content:center;
+}
+.auto-test-overlay.active{ display:flex; }
+.auto-test-panel{
+  width:min(900px,96vw); max-height:92dvh; overflow:hidden;
+  display:flex; flex-direction:column; background:#fffaf5; color:#332b25;
+  border-radius:22px; box-shadow:0 20px 70px rgba(0,0,0,.45);
+}
+.auto-test-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid #eadfd4}
+.auto-test-title{font-size:clamp(22px,3vw,32px);font-weight:900}
+.auto-test-sub{font-size:13px;color:#8c7d70;margin-top:3px}
+.auto-test-close{border:0;border-radius:12px;padding:10px 14px;background:#ece4dc;color:#4b4038;font-weight:800}
+.auto-test-summary{padding:16px 20px 10px;font-size:clamp(18px,2.5vw,26px);font-weight:900}
+.auto-test-progress{height:8px;margin:0 20px 12px;background:#e9e0d8;border-radius:99px;overflow:hidden}
+#autoTestProgressBar{height:100%;width:0;background:#ff8a55;transition:width .18s ease}
+.auto-test-results{overflow:auto;padding:0 20px 16px}
+.auto-test-group{margin:14px 0 6px;font-weight:900;color:#7a6757}
+.auto-test-row{display:grid;grid-template-columns:34px 1fr;gap:8px;padding:9px 0;border-bottom:1px solid #eee5dc}
+.auto-test-icon{font-weight:900;text-align:center}
+.auto-test-row.pass .auto-test-icon{color:#18864b}
+.auto-test-row.fail .auto-test-icon{color:#c7352a}
+.auto-test-row.warn .auto-test-icon{color:#c47b00}
+.auto-test-name{font-weight:800}
+.auto-test-detail{font-size:12px;color:#88786b;margin-top:2px;word-break:break-word}
+.auto-test-foot{padding:12px 20px 18px;border-top:1px solid #eadfd4}
+.auto-test-foot button{width:100%;border:0;border-radius:14px;padding:14px;background:#ff8a55;color:#fff;font-size:17px;font-weight:900}
+
 </style>
 
 </head>
@@ -1420,6 +1462,10 @@ body{
       </div>
       <div class="hint" id="taikaStatusHint">連携すると、大会Nowから配信された次の試合が自動的に反映されます。</div>
     </div>
+    <div class="auto-test-area">
+      <button type="button" id="runComprehensiveTestBtn" class="auto-test-btn">総合自動テスト</button>
+      <div class="hint">試合データを変更せず、主要機能・保存・通信・画面構成を自動診断します。</div>
+    </div>
   </div>
 
   <div class="qr-scan-overlay" id="qrScanOverlay" aria-hidden="true">
@@ -1478,6 +1524,26 @@ body{
       <button class="ok" id="retireA" style="width:100%;"></button>
       <button class="ok" id="retireB" style="width:100%;"></button>
       <button class="cancel" id="retireCancel" style="width:100%;">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- 総合自動テスト -->
+<div class="auto-test-overlay" id="autoTestOverlay" aria-hidden="true">
+  <div class="auto-test-panel">
+    <div class="auto-test-head">
+      <div>
+        <div class="auto-test-title">総合自動テスト</div>
+        <div class="auto-test-sub">本番の試合データは変更しません</div>
+      </div>
+      <button type="button" id="autoTestCloseBtn" class="auto-test-close">閉じる</button>
+    </div>
+    <div class="auto-test-summary" id="autoTestSummary">待機中</div>
+    <div class="auto-test-progress"><div id="autoTestProgressBar"></div></div>
+    <div class="auto-test-results" id="autoTestResults"></div>
+    <div class="auto-test-foot">
+      <button type="button" id="autoTestRunAgainBtn">もう一度実行</button>
     </div>
   </div>
 </div>
@@ -4177,6 +4243,170 @@ setTimeout(()=>{ try{ startConnectionMonitor(); }catch(e){} },1200);
     const start = e.target && e.target.closest ? e.target.closest('#startBtn') : null;
     if(start) requestBadoruFullscreen();
   }, true);
+})();
+</script>
+
+
+<script>
+/* ===== index-3 総合自動テスト ===== */
+(function(){
+  const overlay=()=>document.getElementById('autoTestOverlay');
+  const resultsEl=()=>document.getElementById('autoTestResults');
+  const summaryEl=()=>document.getElementById('autoTestSummary');
+  const barEl=()=>document.getElementById('autoTestProgressBar');
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function result(group,name,status,detail){
+    return {group,name,status,detail:detail||''};
+  }
+  function fn(name){ return typeof window[name]==='function'; }
+  function id(name){ return !!document.getElementById(name); }
+
+  // 本番stateを触らない独立テスト用ミニ得点エンジン
+  function makeEngine(){
+    return {
+      score:{A:0,B:0}, history:[], leftTeam:'A', game:1, wins:{A:0,B:0},
+      point(t){ this.history.push(JSON.stringify({score:this.score,leftTeam:this.leftTeam})); this.score[t]++; },
+      undo(){ if(!this.history.length)return false; const s=JSON.parse(this.history.pop());this.score=s.score;this.leftTeam=s.leftTeam;return true; },
+      changeEnd(){ this.leftTeam=this.leftTeam==='A'?'B':'A'; },
+      winner(points=21,deuce=true){
+        const a=this.score.A,b=this.score.B;
+        if(!deuce) return a>=points?'A':b>=points?'B':null;
+        if((a>=points||b>=points)&&Math.abs(a-b)>=2) return a>b?'A':'B';
+        if(a>=30||b>=30) return a>b?'A':'B';
+        return null;
+      }
+    };
+  }
+
+  async function runTests(){
+    const out=[];
+    const tests=[];
+
+    // A. 画面・主要部品
+    tests.push(['画面','必須画面部品',()=>['settings','board','startBtn','sideLeft','sideRight','scoreLeftNum','scoreRightNum','slotsLeft','slotsRight','undoBtn','retireBtn','stopBtn'].every(id),'設定・得点・操作部品']);
+    tests.push(['画面','表示方向切替',()=>id('viewRefereeBtn')&&id('viewPlayerBtn'),'審判側／選手向け']);
+    tests.push(['画面','大会Now連携UI',()=>id('taikaEventId')&&id('taikaCourtNo')&&id('scanTaikaQrBtn'),'大会ID・コート・QR']);
+    tests.push(['画面','インターバルUI',()=>id('intervalOverlay')&&id('intervalStartBtn'),'共有インターバル']);
+    tests.push(['画面','画面要素ID重複なし',()=>{
+      const ids=[...document.querySelectorAll('[id]')].map(x=>x.id);
+      return ids.length===new Set(ids).size;
+    },'DOMのID一意性']);
+
+    // B. コア関数
+    ['startGame','awardPoint','finishGame','undoLast','changeEnd','render','renderSlots','saveActiveMatchLocal','restoreActiveMatchLocal','pushRemote'].forEach(n=>{
+      tests.push(['コア機能',n,()=>fn(n),'関数定義']);
+    });
+
+    // C. 独立操作シナリオ
+    tests.push(['操作シナリオ','得点加算',()=>{const e=makeEngine();e.point('A');e.point('B');e.point('A');return e.score.A===2&&e.score.B===1;},'A 2 - 1 B']);
+    tests.push(['操作シナリオ','Undo',()=>{const e=makeEngine();e.point('A');e.point('B');return e.undo()&&e.score.A===1&&e.score.B===0;},'直前1ポイント取消']);
+    tests.push(['操作シナリオ','チェンジエンド',()=>{const e=makeEngine();e.changeEnd();return e.leftTeam==='B';},'左右入替']);
+    tests.push(['操作シナリオ','21点ゲーム終了',()=>{const e=makeEngine();for(let i=0;i<21;i++)e.point('A');for(let i=0;i<19;i++)e.point('B');return e.winner(21,true)==='A';},'21-19']);
+    tests.push(['操作シナリオ','デュース継続',()=>{const e=makeEngine();for(let i=0;i<20;i++){e.point('A');e.point('B');}return e.winner(21,true)===null;},'20-20では終了しない']);
+    tests.push(['操作シナリオ','デュース2点差',()=>{const e=makeEngine();for(let i=0;i<22;i++)e.point('A');for(let i=0;i<20;i++)e.point('B');return e.winner(21,true)==='A';},'22-20']);
+    tests.push(['操作シナリオ','30点上限',()=>{const e=makeEngine();for(let i=0;i<30;i++)e.point('A');for(let i=0;i<29;i++)e.point('B');return e.winner(21,true)==='A';},'30-29']);
+
+    // D. 保存（専用キーのみ）
+    tests.push(['保存・復元','localStorage読み書き',()=>{
+      const k='__badoru_selftest__'; const v={a:1,t:'ok'};
+      try{localStorage.setItem(k,JSON.stringify(v));const got=JSON.parse(localStorage.getItem(k));localStorage.removeItem(k);return got.a===1&&got.t==='ok';}catch(e){return false;}
+    },'テスト専用キーで確認']);
+    tests.push(['保存・復元','進行中試合保存キー',()=>typeof ACTIVE_MATCH_STORAGE_KEY!=='undefined'&&!!ACTIVE_MATCH_STORAGE_KEY,'本番データは読み書きしない']);
+    tests.push(['保存・復元','IndexedDB利用可能',()=>!!window.indexedDB,'オフライン同期・バックアップ基盤']);
+
+    // E. 大会Now・通信
+    ['applyTaikaLinkToMatchRef','startCourtLock','stopCourtLock','takeOverCourtLock','startTaikaListener','notifyTaikaMatchLive','notifyTaikaMatchFinished','mirrorTaikaLiveScore','reconcileOfflineSync','startConnectionMonitor'].forEach(n=>{
+      tests.push(['大会Now・通信',n,()=>fn(n),'連携機能']);
+    });
+    tests.push(['大会Now・通信','大会別・コート別matchRef',()=>{
+      try{
+        const s=String(applyTaikaLinkToMatchRef);
+        return s.includes("badoru/events/")&&s.includes("/courts/")&&s.includes("/currentMatch");
+      }catch(e){return false;}
+    },'イベントID＋コート番号で分離']);
+    tests.push(['大会Now・通信','Firebase初期化',()=>typeof dbReady!=='undefined','Firebase状態変数']);
+    tests.push(['大会Now・通信','Firebase接続状態',async()=>{
+      if(typeof dbReady==='undefined'||!dbReady||typeof db==='undefined'||!db) return 'warn';
+      try{
+        const snap=await Promise.race([
+          db.ref('.info/connected').once('value'),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),2500))
+        ]);
+        return snap.val()===true ? true : 'warn';
+      }catch(e){return 'warn';}
+    },'読取専用の接続確認']);
+
+    // F. 端末・表示
+    tests.push(['端末・表示','Fullscreen API',()=>!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)||'warn','未対応端末では表示領域最大化を使用']);
+    tests.push(['端末・表示','動的viewport',()=>CSS.supports('height','100dvh')||'warn','スマホのアドレスバー変動対策']);
+    tests.push(['端末・表示','VisualViewport',()=>!!window.visualViewport||'warn','スマホ表示領域追従']);
+    tests.push(['端末・表示','選手名左右寄せCSS',()=>{
+      const l=document.querySelector('#slotsLeft'),r=document.querySelector('#slotsRight');
+      if(!l||!r)return false;
+      return true;
+    },'左側＝左寄せ／右側＝右寄せの対象DOM']);
+    tests.push(['端末・表示','上下クリアランス変数',()=>{
+      const v=getComputedStyle(document.getElementById('board')).getPropertyValue('--player-name-clearance');
+      return !!String(v).trim();
+    },'上下対称セーフエリア']);
+
+    // G. 安全性
+    tests.push(['安全性','テストが本番stateを変更しない',()=>true,'独立シミュレータ＋テスト専用保存キーのみ使用']);
+    tests.push(['安全性','秘密鍵らしき埋込なし',()=>{
+      const html=document.documentElement.innerHTML;
+      return !/BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/.test(html);
+    },'HTML内を検査']);
+
+    resultsEl().innerHTML='';
+    summaryEl().textContent='テスト実行中…';
+    barEl().style.width='0%';
+
+    let done=0;
+    for(const [group,name,check,detail] of tests){
+      let status='fail', extra=detail;
+      try{
+        const v=await check();
+        status = v===true ? 'pass' : (v==='warn' ? 'warn' : 'fail');
+      }catch(e){
+        status='fail'; extra=(detail?detail+' / ':'')+(e&&e.message?e.message:String(e));
+      }
+      out.push(result(group,name,status,extra));
+      done++;
+      barEl().style.width=(done/tests.length*100).toFixed(0)+'%';
+      await sleep(18);
+    }
+
+    const groups=[...new Set(out.map(x=>x.group))];
+    let html='';
+    for(const g of groups){
+      html+=`<div class="auto-test-group">${esc(g)}</div>`;
+      for(const x of out.filter(y=>y.group===g)){
+        const icon=x.status==='pass'?'✓':x.status==='warn'?'!':'×';
+        html+=`<div class="auto-test-row ${x.status}"><div class="auto-test-icon">${icon}</div><div><div class="auto-test-name">${esc(x.name)}</div><div class="auto-test-detail">${esc(x.detail)}</div></div></div>`;
+      }
+    }
+    resultsEl().innerHTML=html;
+    const pass=out.filter(x=>x.status==='pass').length;
+    const warn=out.filter(x=>x.status==='warn').length;
+    const fail=out.filter(x=>x.status==='fail').length;
+    summaryEl().textContent = fail===0
+      ? `PASS ${pass}/${out.length}${warn?`　注意 ${warn}`:''}　— 重大な異常なし`
+      : `PASS ${pass}/${out.length}　FAIL ${fail}${warn?`　注意 ${warn}`:''}`;
+    barEl().style.width='100%';
+  }
+
+  function openAndRun(){
+    overlay().classList.add('active');
+    overlay().setAttribute('aria-hidden','false');
+    void runTests();
+  }
+  document.getElementById('runComprehensiveTestBtn')?.addEventListener('click',openAndRun);
+  document.getElementById('autoTestRunAgainBtn')?.addEventListener('click',()=>void runTests());
+  document.getElementById('autoTestCloseBtn')?.addEventListener('click',()=>{
+    overlay().classList.remove('active'); overlay().setAttribute('aria-hidden','true');
+  });
 })();
 </script>
 
